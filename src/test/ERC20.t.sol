@@ -48,6 +48,7 @@ contract ERC20Test is Test {
 
     function test_transfer_balancesChange() public {
         _token.exposed_mint(_beef, 123);
+
         assertEq(_token.balanceOf(_beef), 123);
         assertEq(_token.balanceOf(_feed), 0);
         
@@ -61,11 +62,15 @@ contract ERC20Test is Test {
         assertEq(_token.balanceOf(_feed), 123);
     }
 
-    function test_transfer_zeroAllowed() public {
+    function test_transfer_zeroAmountAllowed() public {
         _token.exposed_mint(_beef, 123);
+
         assertEq(_token.balanceOf(_beef), 123);
         assertEq(_token.balanceOf(_feed), 0);
         
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(_beef, _feed, 0);
+
         vm.prank(_beef);
         _token.transfer(_feed, 0);
         assertEq(_token.balanceOf(_beef), 123);
@@ -74,14 +79,16 @@ contract ERC20Test is Test {
 
     function test_transfer_eventEmitted() public {
         _token.exposed_mint(_beef, 123);
+
         vm.expectEmit(true, true, false, true);
         emit Transfer(_beef, _feed, 23);
         vm.startPrank(_beef);
         _token.transfer(_feed, 23);
     }
 
-    function test_transfer_zeroAddressRevert() public {
+    function test_transfer_toZeroAddress() public {
         _token.exposed_mint(_beef, 123);
+
         vm.startPrank(_beef);
         vm.expectRevert("Transfer to zero address");
         _token.transfer(address(0), 23);
@@ -89,12 +96,14 @@ contract ERC20Test is Test {
 
     function test_transfer_insufficientFunds() public {
         _token.exposed_mint(_beef, 123);
+
         vm.expectRevert("Insufficient funds");
         _token.transfer(_feed, 124);
     }
 
     function test_transfer_successReturnsTrue() public {
         _token.exposed_mint(_beef, 123);
+
         vm.startPrank(_beef);
         bool success = _token.transfer(_feed, 123);
         assertTrue(success);
@@ -103,8 +112,113 @@ contract ERC20Test is Test {
     // Maybe not necessary
     function test_transfer_failDoesntReturn() public {
         _token.exposed_mint(_beef, 123);
+
         vm.expectRevert("Insufficient funds");
         bool success = _token.transfer(_feed, 124);
         assertTrue(success == false);
     }
+
+    function test_allowance_initZero() public {
+        assertEq(_token.allowance(_feed, _beef), 0);
+    }
+
+    function test_allowance_increaseWithApprove() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+    }
+
+    function test_approve_senderZeroAddress() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        vm.expectRevert("Approval of zero address");
+        _token.approve(address(0), 23);
+    }
+
+    function test_approve_ownerNotSpender() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        vm.expectRevert("Approval of owner as spender");
+        _token.approve(_feed, 23);
+    }
+
+    function test_approve_allowanceIncreases() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+    }
+
+    function test_approve_allowanceMoreThanBalanceI() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 163);
+        assertEq(_token.allowance(_feed, _beef), 163);
+
+        vm.startPrank(_beef);
+        _token.transferFrom(_feed, address(1967), 60);
+        assertEq(_token.allowance(_feed, _beef), 103);
+        assertEq(_token.balanceOf(address(1967)), 60);
+        assertEq(_token.balanceOf(_feed), 63);
+    }
+
+    function test_approve_allowanceMoreThanBalanceII() public {
+        vm.startPrank(_feed);
+        _token.approve(_beef, 163);
+        assertEq(_token.allowance(_feed, _beef), 163);
+
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_beef);
+        _token.transferFrom(_feed, address(1967), 60);
+        assertEq(_token.allowance(_feed, _beef), 103);
+        assertEq(_token.balanceOf(address(1967)), 60);
+        assertEq(_token.balanceOf(_feed), 63);
+    }
+
+    function test_approve_allowanceOverride() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 163);
+        assertEq(_token.allowance(_feed, _beef), 163);
+
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+    }
+
+    function test_approve_eventEmitted() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        vm.expectEmit(true, true, false, true);
+        emit Approval(_feed, _beef, 123);
+        _token.approve(_beef, 123);
+    }
+
+    function test_transferFrom_noApproval() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_beef);
+        vm.expectRevert("Insufficient allowance");
+        _token.transferFrom(_feed, address(1967), 23);
+    }
+
+    function test_transferFrom_insufficientAllowance() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+
+        vm.startPrank(_beef);
+        vm.expectRevert("Insufficient allowance");
+        _token.transferFrom(_feed, address(1967), 24);
+    }  
 }
