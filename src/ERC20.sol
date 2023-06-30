@@ -17,13 +17,17 @@ contract ERC20 is IERC20 {
     // maps token holder to spender to allowance
     mapping(address => mapping(address => uint256)) private _allowances;
 
+    // total token supply
+    uint256 _totalSupply;
+
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
+        _totalSupply = 0;
     }
 
     function totalSupply() external view returns (uint256) {
-
+        return _totalSupply;
     }
     
     function balanceOf(address account) external view returns (uint256) {
@@ -31,8 +35,8 @@ contract ERC20 is IERC20 {
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {
-        require(to != address(0), "Transfer to zero address");
         require(_balances[msg.sender] >= amount, "Insufficient funds");
+        require(to != address(0), "Transfer to zero address");
         _balances[msg.sender] -= amount;
         _balances[to] += amount;
         emit Transfer(msg.sender, to, amount);
@@ -72,5 +76,13 @@ contract ERC20 is IERC20 {
 
     function symbol() public view returns (string memory) {
         return _symbol;
+    }
+
+    function _mint(address to, uint256 amount) internal virtual returns (bool) {
+        require(to != address(0), "Transfer to zero address");
+        _balances[to] += amount;
+        _totalSupply += amount;
+        emit Transfer(address(0), to, amount);
+        return true;
     }
 }
