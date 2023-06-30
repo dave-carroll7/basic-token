@@ -5,12 +5,17 @@ import "./interfaces/IERC20.sol";
 
 contract ERC20 is IERC20 {
 
-    mapping(address => uint256) public balances;
-    // maps token holder to spender to allowance
-    mapping(address => mapping(address => uint256)) public approvals;
+    
 
     string private _name;
     string private _symbol;
+
+    // maps token holder to balance
+    mapping(address => uint256) private _balances;
+
+    // maps token holder to spender to allowance
+    mapping(address => mapping(address => uint256)) private _approvals;
+
 
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
@@ -27,22 +32,22 @@ contract ERC20 is IERC20 {
 
     
     function transfer(address to, uint256 amount) external returns (bool) {
-        require(balances[msg.sender] >= amount, "Insufficient funds");
-        balances[msg.sender] -= amount;
-        balances[to] += amount;
+        require(_balances[msg.sender] >= amount, "Insufficient funds");
+        _balances[msg.sender] -= amount;
+        _balances[to] += amount;
         emit Transfer(msg.sender, to, amount);
         return true;
     }
 
     
     function allowance(address owner, address spender) external view returns (uint256) {
-        return approvals[owner][spender];
+        return _approvals[owner][spender];
     }
 
     
     function approve(address spender, uint256 amount) external returns (bool) {
         require(msg.sender != spender, "Can't approve owner as spender");
-        approvals[msg.sender][spender] += amount;
+        _approvals[msg.sender][spender] += amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
