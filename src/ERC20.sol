@@ -47,7 +47,7 @@ contract ERC20 is IERC20 {
     function approve(address spender, uint256 amount) external returns (bool) {
         require(spender != address(0), "Approval of zero address");
         require(msg.sender != spender, "Approval of owner as spender");
-        _approvals[msg.sender][spender] += amount;
+        _approvals[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
