@@ -220,5 +220,103 @@ contract ERC20Test is Test {
         vm.startPrank(_beef);
         vm.expectRevert("Insufficient allowance");
         _token.transferFrom(_feed, address(1967), 24);
-    }  
+    }
+
+    function test_transferFrom_insufficientFunds() public {
+        _token.exposed_mint(_feed, 23);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 123);
+        assertEq(_token.allowance(_feed, _beef), 123);
+
+        vm.startPrank(_beef);
+        vm.expectRevert("Insufficient funds");
+        _token.transferFrom(_feed, address(1967), 24);
+    }
+
+    function test_transferFrom_toZeroAddress() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 123);
+        assertEq(_token.allowance(_feed, _beef), 123);
+
+        vm.startPrank(_beef);
+        vm.expectRevert("Transfer to zero address");
+        _token.transferFrom(_feed, address(0), 23);
+    }
+
+    function test_transferFrom_balanceAllowanceChanges() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 143);
+        assertEq(_token.allowance(_feed, _beef), 143);
+
+        vm.startPrank(_beef);
+        _token.transferFrom(_feed, address(1967), 23);
+        assertEq(_token.allowance(_feed, _beef), 120);
+        assertEq(_token.balanceOf(_feed), 100);
+        assertEq(_token.balanceOf(address(1967)), 23);
+
+        _token.transferFrom(_feed, address(1967), 20);
+        assertEq(_token.allowance(_feed, _beef), 100);
+        assertEq(_token.balanceOf(_feed), 80);
+        assertEq(_token.balanceOf(address(1967)), 43);
+
+        vm.startPrank(_feed);
+        address _beef2 = address(0xbef0);
+        _token.approve(_beef2, 20);
+        assertEq(_token.allowance(_feed, _beef2), 20);
+
+        vm.startPrank(_beef2);
+        _token.transferFrom(_feed, address(1967), 20);
+        assertEq(_token.allowance(_feed, _beef2), 0);
+        assertEq(_token.balanceOf(_feed), 60);
+        assertEq(_token.balanceOf(address(1967)), 63);
+    }
+
+    function test_transferFrom_eventEmitted() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 123);
+        assertEq(_token.allowance(_feed, _beef), 123);
+
+        vm.startPrank(_beef);
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(_feed, address(1967), 123);
+        _token.transferFrom(_feed, address(1967), 123);
+    }
+
+    function test_name_isName() public {
+        assertEq(_token.name(), "");
+
+        ERC20 otherToken = new ERC20("BasicToken", "BTX");
+        assertEq(otherToken.name(), "BasicToken");
+    }
+
+    function test_symbol_isSymbol() public {
+        assertEq(_token.symbol(), "");
+
+        ERC20 otherToken = new ERC20("BasicToken", "BTX");
+        assertEq(otherToken.symbol(), "BTX");
+    }
+
+    function test_mint_toZeroAddress() public {
+        vm.expectRevert("Transfer to zero address");
+        _token.exposed_mint(address(0), 123);
+    }
+
+    function test_mint_balanceSupplyChanges() public {
+        _token.exposed_mint(_beef, 123);
+        assertEq(_token.totalSupply(), 123);
+        assertEq(_token.balanceOf(_beef), 123);
+    }
+
+    function test_mint_eventEmitted() public {
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(address(0), _beef, 123);
+        _token.exposed_mint(_beef, 123);
+    }
 }
