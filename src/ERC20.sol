@@ -5,8 +5,6 @@ import "./interfaces/IERC20.sol";
 
 contract ERC20 is IERC20 {
 
-    
-
     string private _name;
     string private _symbol;
 
@@ -27,7 +25,7 @@ contract ERC20 is IERC20 {
     }
     
     function balanceOf(address account) external view returns (uint256) {
-        return balances[account];
+        return _balances[account];
     }
 
     
