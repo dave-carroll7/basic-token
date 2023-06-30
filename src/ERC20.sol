@@ -5,7 +5,10 @@ import "./interfaces/IERC20.sol";
 
 contract ERC20 is IERC20 {
 
+    // token name
     string private _name;
+    
+    // token symbol
     string private _symbol;
 
     // maps token holder to balance
