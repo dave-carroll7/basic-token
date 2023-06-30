@@ -30,6 +30,7 @@ contract ERC20 is IERC20 {
 
     
     function transfer(address to, uint256 amount) external returns (bool) {
+        require(to != address(0), "Transfer to zero address");
         require(_balances[msg.sender] >= amount, "Insufficient funds");
         _balances[msg.sender] -= amount;
         _balances[to] += amount;
@@ -44,7 +45,8 @@ contract ERC20 is IERC20 {
 
     
     function approve(address spender, uint256 amount) external returns (bool) {
-        require(msg.sender != spender, "Can't approve owner as spender");
+        require(spender != address(0), "Approval of zero address");
+        require(msg.sender != spender, "Approval of owner as spender");
         _approvals[msg.sender][spender] += amount;
         emit Approval(msg.sender, spender, amount);
         return true;
