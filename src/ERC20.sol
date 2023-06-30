@@ -58,7 +58,14 @@ contract ERC20 is IERC20 {
         address to,
         uint256 amount
     ) external returns (bool) {
-
+        require(_approvals[from][msg.sender] >= amount, "Insufficient allowance");
+        require(_balances[from] >= amount, "Insufficient funds");
+        require(to != address(0), "Transfer to zero address");
+        _approvals[from][msg.sender] -= amount;
+        _balances[from] -= amount;
+        _balances[to] += amount;
+        emit Transfer(from, to, amount);
+        return true;
     }
 
     function name() public view returns (string memory) {
