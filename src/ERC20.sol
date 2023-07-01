@@ -17,7 +17,7 @@ contract ERC20 is IERC20 {
     // maps token holder to balance
     mapping(address => uint256) private _balances;
 
-    // maps token holder to spender to allowance
+    // maps token holder to approved spender to allowance
     mapping(address => mapping(address => uint256)) private _allowances;
 
     // total token supply
