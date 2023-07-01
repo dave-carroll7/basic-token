@@ -26,6 +26,14 @@ contract ERC20Test is Test {
         _feed = address(0xfeed);
     }
 
+    function test_constructor_initNameSymbolSupply() public {
+        ERC20 otherToken = new ERC20("blah", "BLA");
+
+        assertEq(otherToken.name(), "blah");
+        assertEq(otherToken.symbol(), "BLA");
+        assertEq(otherToken.totalSupply(), 0);
+    }
+
     function test_totalSupply_initZero() public {
         assertEq(_token.totalSupply(), 0);
     }
@@ -309,6 +317,18 @@ contract ERC20Test is Test {
         _token.transferFrom(_feed, address(1967), 123);
     }
 
+    function test_transferFrom_successReturnsTrue() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 123);
+        assertEq(_token.allowance(_feed, _beef), 123);
+
+        vm.startPrank(_beef);
+        bool success = _token.transferFrom(_feed, address(1967), 23);
+        assertTrue(success);
+    }
+
     function test_name_isName() public {
         assertEq(_token.name(), "");
 
@@ -338,5 +358,55 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), _beef, 123);
         _token.exposed_mint(_beef, 123);
+    }
+
+    function testFuzz_constructor(string memory name, string memory symbol) public {
+        ERC20 otherToken = new ERC20(name, symbol);
+
+        assertEq(otherToken.name(), name);
+        assertEq(otherToken.symbol(), symbol);
+        assertEq(otherToken.totalSupply(), 0);
+    }
+
+    function testFuzz_totalSupply_increaseWithMint(uint256 amount) public {
+        assertEq(_token.totalSupply(), 0);
+        _token.exposed_mint(_beef, amount);
+        assertEq(_token.totalSupply(), amount);
+    }
+
+    function testFuzz_balanceOf_increaseWithMint(uint256 amount) public {
+        assertEq(_token.balanceOf(_beef), 0);
+        _token.exposed_mint(_beef, amount);
+        assertEq(_token.balanceOf(_beef), amount);
+    }
+
+    function testFuzz_transfer_wholistic(address beef, address feed, uint256 mintAmount, uint256 sendAmount) public {
+        if (beef == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+            _token.exposed_mint(beef, mintAmount);
+            assertEq(_token.balanceOf(beef), 0);
+            assertEq(_token.balanceOf(feed), 0);
+        } else {
+            _token.exposed_mint(beef, mintAmount);
+            assertEq(_token.balanceOf(beef), mintAmount);
+            assertEq(_token.balanceOf(feed), 0);
+        }
+        
+        vm.startPrank(beef);
+        
+        if (sendAmount > _token.balanceOf(beef)) {
+            vm.expectRevert("Insufficient funds");
+            _token.transfer(feed, sendAmount);
+        } else if (feed == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+            _token.transfer(feed, sendAmount);
+        } else {
+            vm.expectEmit(true, true, false, true);
+            emit Transfer(beef, feed, sendAmount);
+            bool success = _token.transfer(feed, sendAmount);
+            assertEq(_token.balanceOf(beef), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(feed), sendAmount);
+            assertTrue(success);
+        }
     }
 }
