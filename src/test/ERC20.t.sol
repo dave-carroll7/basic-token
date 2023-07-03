@@ -26,6 +26,14 @@ contract ERC20Test is Test {
         _feed = address(0xfeed);
     }
 
+    function test_constructor_initNameSymbolSupply() public {
+        ERC20 otherToken = new ERC20("blah", "BLA");
+
+        assertEq(otherToken.name(), "blah");
+        assertEq(otherToken.symbol(), "BLA");
+        assertEq(otherToken.totalSupply(), 0);
+    }
+
     function test_totalSupply_initZero() public {
         assertEq(_token.totalSupply(), 0);
     }
@@ -126,6 +134,32 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+    }
+
+    function test_allowance_decreaseWithTransferFrom() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+
+        _token.approve(_beef, 23);
+        assertEq(_token.allowance(_feed, _beef), 23);
+
+        vm.startPrank(_beef);
+
+        _token.transferFrom(_feed, address(1967), 23);
+        assertEq(_token.allowance(_feed, _beef), 0);
+    }
+
+    function test_allowance_updateWithApprove() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 163);
+        assertEq(_token.allowance(_feed, _beef), 163);
+
         _token.approve(_beef, 23);
         assertEq(_token.allowance(_feed, _beef), 23);
     }
@@ -180,17 +214,6 @@ contract ERC20Test is Test {
         assertEq(_token.allowance(_feed, _beef), 103);
         assertEq(_token.balanceOf(address(1967)), 60);
         assertEq(_token.balanceOf(_feed), 63);
-    }
-
-    function test_approve_allowanceOverride() public {
-        _token.exposed_mint(_feed, 123);
-
-        vm.startPrank(_feed);
-        _token.approve(_beef, 163);
-        assertEq(_token.allowance(_feed, _beef), 163);
-
-        _token.approve(_beef, 23);
-        assertEq(_token.allowance(_feed, _beef), 23);
     }
 
     function test_approve_eventEmitted() public {
@@ -309,6 +332,18 @@ contract ERC20Test is Test {
         _token.transferFrom(_feed, address(1967), 123);
     }
 
+    function test_transferFrom_successReturnsTrue() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+        _token.approve(_beef, 123);
+        assertEq(_token.allowance(_feed, _beef), 123);
+
+        vm.startPrank(_beef);
+        bool success = _token.transferFrom(_feed, address(1967), 23);
+        assertTrue(success);
+    }
+
     function test_name_isName() public {
         assertEq(_token.name(), "");
 
@@ -338,5 +373,534 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), _beef, 123);
         _token.exposed_mint(_beef, 123);
+    }
+
+    function testFuzz_constructor(string memory name, string memory symbol) public {
+        ERC20 otherToken = new ERC20(name, symbol);
+
+        assertEq(otherToken.name(), name);
+        assertEq(otherToken.symbol(), symbol);
+        assertEq(otherToken.totalSupply(), 0);
+    }
+
+    function testFuzz_totalSupply_increaseWithMint(uint256 amount) public {
+        _token.exposed_mint(_beef, amount);
+
+        assertEq(_token.totalSupply(), amount);
+    }
+
+    function testFuzz_balanceOf_increaseWithMint(uint256 amount) public {
+        assertEq(_token.balanceOf(_beef), 0);
+        _token.exposed_mint(_beef, amount);
+        assertEq(_token.balanceOf(_beef), amount);
+    }
+
+    function testFuzz_transfer_insufficientFunds(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(receiver != address(0));
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        if (sendAmount > mintAmount) {
+            vm.expectRevert("Insufficient funds");
+        }
+        _token.transfer(receiver, sendAmount);
+    }
+
+    function testFuzz_transfer_toZeroAddress(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        if (receiver == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+        }
+        _token.transfer(receiver, sendAmount);
+    }
+
+    function testFuzz_transfer_balancesChange(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != receiver);
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+        assertEq(_token.balanceOf(owner), mintAmount);
+        assertEq(_token.balanceOf(receiver), 0);
+
+        vm.startPrank(owner);
+
+        _token.transfer(receiver, sendAmount);
+        assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+        assertEq(_token.balanceOf(receiver), sendAmount);
+
+        if (mintAmount > sendAmount) {
+            _token.transfer(receiver, mintAmount - sendAmount);
+            assertEq(_token.balanceOf(owner), 0);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+        }
+    }
+
+    function testFuzz_transfer_eventEmitted(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(owner, receiver, sendAmount);
+        _token.transfer(receiver, sendAmount);
+    }
+
+    function testFuzz_transfer_entireFlow(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0)); // since this would revert in _mint, not transfer
+
+        _token.exposed_mint(owner, mintAmount);
+        assertEq(_token.balanceOf(owner), mintAmount);
+        assertEq(_token.balanceOf(receiver), 0);
+        
+        
+        vm.startPrank(owner);
+        
+        if (sendAmount > mintAmount) {
+            vm.expectRevert("Insufficient funds");
+            _token.transfer(receiver, sendAmount);
+        } else if (receiver == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+            _token.transfer(receiver, sendAmount);
+        } else if (owner == receiver) {
+            vm.expectEmit(true, true, false, true);
+            emit Transfer(owner, receiver, sendAmount);
+            bool success = _token.transfer(receiver, sendAmount);
+
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+            assertTrue(success);
+        } else {
+            vm.expectEmit(true, true, false, true);
+            emit Transfer(owner, receiver, sendAmount);
+            bool success = _token.transfer(receiver, sendAmount);
+
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+            assertTrue(success);
+        }
+    }
+
+    function testFuzz_allowance_initZero(address owner, address spender) public {
+        assertEq(_token.allowance(owner, spender), 0);
+    }
+
+    function testFuzz_allowance_increaseWithApprove(address owner, address spender, uint256 amount) public {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+        assertEq(_token.balanceOf(owner), amount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, amount);
+        assertEq(_token.allowance(owner, spender), amount);
+    }
+
+    function testFuzz_allowance_updateWithApprove(
+        address owner, 
+        address spender, 
+        uint256 amount1, 
+        uint256 amount2
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount1);
+        assertEq(_token.balanceOf(owner), amount1);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, amount1);
+        assertEq(_token.allowance(owner, spender), amount1);
+
+        _token.approve(spender, amount2);
+        assertEq(_token.allowance(owner, spender), amount2);
+    }
+
+    function testFuzz_allowance_decreaseWithTransfer(
+        address owner, 
+        address spender, 
+        address receiver, 
+        uint256 amount
+    ) 
+    public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, amount);
+
+        vm.startPrank(spender);
+
+        _token.transferFrom(owner, receiver, amount);
+        assertEq(_token.allowance(owner, spender), 0);
+    }
+
+    function testFuzz_approve_toZeroAddress(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        if (spender == address(0)) {
+            vm.expectRevert("Approval of zero address");
+        }
+        _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_ownerNotSpender(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        if (owner == spender) {
+            vm.expectRevert("Approval of owner as spender");
+        }
+        _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_allowanceIncreases(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, amount);
+        assertEq(_token.allowance(owner, spender), amount);
+    }
+
+    function testFuzz_approve_eventEmitted(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        vm.expectEmit(true, true, true, true);
+        emit Approval(owner, spender, amount);
+        _token.approve(spender, amount);
+    }
+
+    function testFuzz_transferFrom_insufficientAllowance(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (sendAmount > allowanceAmount) {
+            vm.expectRevert("Insufficient allowance");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_insufficientFunds(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (sendAmount > mintAmount) {
+            vm.expectRevert("Insufficient funds");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_toZeroAddress(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (receiver == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_balanceAllowanceChanges(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        _token.transferFrom(owner, receiver, sendAmount);
+
+        if (owner != receiver) {
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+        } else {
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+        }
+
+        assertEq(_token.allowance(owner, spender), allowanceAmount - sendAmount);
+    }
+
+    function testFuzz_transferFrom_approveBeforeMint(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        _token.transferFrom(owner, receiver, sendAmount);
+
+        if (owner != receiver) {
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+        } else {
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+        }
+
+        assertEq(_token.allowance(owner, spender), allowanceAmount - sendAmount);
+    }
+
+    function testFuzz_transferFrom_eventEmitted(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(owner, receiver, sendAmount);
+
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_mint_toZeroAddress(address to, uint256 amount) public {
+        if (to == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+        }
+        _token.exposed_mint(to, amount);
+    }
+
+    function testFuzz_mint_totalSupplyIncreases(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        _token.exposed_mint(to, amount);
+
+        assertEq(_token.totalSupply(), amount);
+    }
+
+    function testFuzz_mint_balanceIncreases(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        _token.exposed_mint(to, amount);
+
+        assertEq(_token.balanceOf(to), amount);
+    }
+
+    function testFuzz_mint_eventEmitted(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), to, amount);
+
+        _token.exposed_mint(to, amount);
     }
 }
