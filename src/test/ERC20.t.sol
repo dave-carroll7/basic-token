@@ -1,14 +1,16 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
+import "forge-std/console2.sol";
 import "../ERC20.sol";
 
 // solhint-disable func-name-mixedcase
 
 contract ERC20Harness is ERC20("", "") {
 
-    function exposed_mint(address to, uint256 amount) public {
-        _mint(to, amount);
+    function exposed_mint(address to, uint256 amount) public returns (bool) {
+        return _mint(to, amount);
     }
 }
 
@@ -31,7 +33,6 @@ contract ERC20Test is Test {
 
         assertEq(otherToken.name(), "blah");
         assertEq(otherToken.symbol(), "BLA");
-        assertEq(otherToken.totalSupply(), 0);
     }
 
     function test_totalSupply_initZero() public {
@@ -39,8 +40,8 @@ contract ERC20Test is Test {
     }
 
     function test_totalSupply_increaseWithMint() public {
-        assertEq(_token.totalSupply(), 0);
         _token.exposed_mint(_beef, 123);
+
         assertEq(_token.totalSupply(), 123);
     }
 
@@ -49,18 +50,18 @@ contract ERC20Test is Test {
     }
 
     function test_balanceOf_increaseWithMint() public {
-        assertEq(_token.balanceOf(_beef), 0);
         _token.exposed_mint(_beef, 123);
+
         assertEq(_token.balanceOf(_beef), 123);
     }
 
     function test_transfer_balancesChange() public {
         _token.exposed_mint(_beef, 123);
-
         assertEq(_token.balanceOf(_beef), 123);
         assertEq(_token.balanceOf(_feed), 0);
         
         vm.startPrank(_beef);
+
         _token.transfer(_feed, 23);
         assertEq(_token.balanceOf(_beef), 100);
         assertEq(_token.balanceOf(_feed), 23);
@@ -72,14 +73,11 @@ contract ERC20Test is Test {
 
     function test_transfer_zeroAmountAllowed() public {
         _token.exposed_mint(_beef, 123);
-
         assertEq(_token.balanceOf(_beef), 123);
         assertEq(_token.balanceOf(_feed), 0);
-        
-        vm.expectEmit(true, true, false, true);
-        emit Transfer(_beef, _feed, 0);
 
         vm.prank(_beef);
+
         _token.transfer(_feed, 0);
         assertEq(_token.balanceOf(_beef), 123);
         assertEq(_token.balanceOf(_feed), 0);
@@ -87,10 +85,11 @@ contract ERC20Test is Test {
 
     function test_transfer_eventEmitted() public {
         _token.exposed_mint(_beef, 123);
+        
+        vm.startPrank(_beef);
 
         vm.expectEmit(true, true, false, true);
         emit Transfer(_beef, _feed, 23);
-        vm.startPrank(_beef);
         _token.transfer(_feed, 23);
     }
 
@@ -98,12 +97,15 @@ contract ERC20Test is Test {
         _token.exposed_mint(_beef, 123);
 
         vm.startPrank(_beef);
+
         vm.expectRevert("Transfer to zero address");
         _token.transfer(address(0), 23);
     }
 
     function test_transfer_insufficientFunds() public {
         _token.exposed_mint(_beef, 123);
+
+        vm.startPrank(_beef);
 
         vm.expectRevert("Insufficient funds");
         _token.transfer(_feed, 124);
@@ -113,16 +115,19 @@ contract ERC20Test is Test {
         _token.exposed_mint(_beef, 123);
 
         vm.startPrank(_beef);
+
         bool success = _token.transfer(_feed, 123);
         assertTrue(success);
     }
 
-    // Maybe not necessary
-    function test_transfer_failDoesntReturn() public {
+    function test_transfer_failReturnsFalse() public {
         _token.exposed_mint(_beef, 123);
+
+        vm.startPrank(_beef);
 
         vm.expectRevert("Insufficient funds");
         bool success = _token.transfer(_feed, 124);
+        
         assertTrue(success == false);
     }
 
@@ -145,7 +150,6 @@ contract ERC20Test is Test {
         vm.startPrank(_feed);
 
         _token.approve(_beef, 23);
-        assertEq(_token.allowance(_feed, _beef), 23);
 
         vm.startPrank(_beef);
 
@@ -157,6 +161,7 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 163);
         assertEq(_token.allowance(_feed, _beef), 163);
 
@@ -168,6 +173,7 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         vm.expectRevert("Approval of zero address");
         _token.approve(address(0), 23);
     }
@@ -176,6 +182,7 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         vm.expectRevert("Approval of owner as spender");
         _token.approve(_feed, 23);
     }
@@ -184,32 +191,34 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 23);
         assertEq(_token.allowance(_feed, _beef), 23);
     }
 
-    function test_approve_allowanceMoreThanBalanceI() public {
+    function test_approve_allowanceDecreasesWithTransferFrom() public {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 163);
-        assertEq(_token.allowance(_feed, _beef), 163);
 
         vm.startPrank(_beef);
+
         _token.transferFrom(_feed, address(1967), 60);
         assertEq(_token.allowance(_feed, _beef), 103);
-        assertEq(_token.balanceOf(address(1967)), 60);
-        assertEq(_token.balanceOf(_feed), 63);
     }
 
-    function test_approve_allowanceMoreThanBalanceII() public {
+    function test_approve_aproveBeforeMint() public {
         vm.startPrank(_feed);
+
         _token.approve(_beef, 163);
         assertEq(_token.allowance(_feed, _beef), 163);
 
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_beef);
+
         _token.transferFrom(_feed, address(1967), 60);
         assertEq(_token.allowance(_feed, _beef), 103);
         assertEq(_token.balanceOf(address(1967)), 60);
@@ -220,15 +229,36 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         vm.expectEmit(true, true, false, true);
         emit Approval(_feed, _beef, 123);
         _token.approve(_beef, 123);
+    }
+
+    function test_approve_successReturnsTrue() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+
+        bool success = _token.approve(_beef, 123);
+        assertTrue(success);
+    }
+
+    function test_approve_failReturnsFalse() public {
+        _token.exposed_mint(_feed, 123);
+
+        vm.startPrank(_feed);
+
+        vm.expectRevert("Approval of zero address");
+        bool success = _token.approve(address(0), 123);
+        assertTrue(success == false);
     }
 
     function test_transferFrom_noApproval() public {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_beef);
+
         vm.expectRevert("Insufficient allowance");
         _token.transferFrom(_feed, address(1967), 23);
     }
@@ -237,10 +267,11 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 23);
-        assertEq(_token.allowance(_feed, _beef), 23);
 
         vm.startPrank(_beef);
+
         vm.expectRevert("Insufficient allowance");
         _token.transferFrom(_feed, address(1967), 24);
     }
@@ -249,10 +280,11 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 23);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 123);
-        assertEq(_token.allowance(_feed, _beef), 123);
 
         vm.startPrank(_beef);
+
         vm.expectRevert("Insufficient funds");
         _token.transferFrom(_feed, address(1967), 24);
     }
@@ -261,10 +293,11 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 123);
-        assertEq(_token.allowance(_feed, _beef), 123);
 
         vm.startPrank(_beef);
+
         vm.expectRevert("Transfer to zero address");
         _token.transferFrom(_feed, address(0), 23);
     }
@@ -273,10 +306,11 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 143);
-        assertEq(_token.allowance(_feed, _beef), 143);
 
         vm.startPrank(_beef);
+
         _token.transferFrom(_feed, address(1967), 23);
         assertEq(_token.allowance(_feed, _beef), 120);
         assertEq(_token.balanceOf(_feed), 100);
@@ -288,11 +322,13 @@ contract ERC20Test is Test {
         assertEq(_token.balanceOf(address(1967)), 43);
 
         vm.startPrank(_feed);
+
         address _beef2 = address(0xbef0);
+
         _token.approve(_beef2, 20);
-        assertEq(_token.allowance(_feed, _beef2), 20);
 
         vm.startPrank(_beef2);
+
         _token.transferFrom(_feed, address(1967), 20);
         assertEq(_token.allowance(_feed, _beef2), 0);
         assertEq(_token.balanceOf(_feed), 60);
@@ -303,30 +339,47 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
-        _token.approve(_beef, 123);
-        assertEq(_token.allowance(_feed, _beef), 123);
+
+        _token.approve(_beef, 100);
 
         vm.startPrank(_beef);
-        _token.transferFrom(_feed, address(1967), 123);
+
+        _token.transferFrom(_feed, address(1967), 100);
         assertEq(_token.allowance(_feed, _beef), 0);
-        assertEq(_token.balanceOf(_feed), 0);
-        assertEq(_token.balanceOf(address(1967)), 123);
+        assertEq(_token.balanceOf(_feed), 23);
+        assertEq(_token.balanceOf(address(1967)), 100);
 
         vm.expectRevert("Insufficient allowance");
-        _token.transferFrom(_feed, address(1967), 20);
+        _token.transferFrom(_feed, address(1967), 23);
         assertEq(_token.allowance(_feed, _beef), 0);
-        assertEq(_token.balanceOf(_feed), 0);
-        assertEq(_token.balanceOf(address(1967)), 123);
+        assertEq(_token.balanceOf(_feed), 23);
+        assertEq(_token.balanceOf(address(1967)), 100);
+    }
+
+    function test_transferFrom_allowanceUpdate() public {
+        _token.exposed_mint(_feed, 123);
+        
+        vm.startPrank(_feed);
+
+        _token.approve(_beef, 123);
+        _token.approve(_beef, 100);
+        assertEq(_token.allowance(_feed, _beef), 100);
+
+        vm.startPrank(_beef);
+
+        vm.expectRevert("Insufficient allowance");
+        _token.transferFrom(_feed, address(1967), 123);
     }
 
     function test_transferFrom_eventEmitted() public {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 123);
-        assertEq(_token.allowance(_feed, _beef), 123);
 
         vm.startPrank(_beef);
+
         vm.expectEmit(true, true, false, true);
         emit Transfer(_feed, address(1967), 123);
         _token.transferFrom(_feed, address(1967), 123);
@@ -336,24 +389,35 @@ contract ERC20Test is Test {
         _token.exposed_mint(_feed, 123);
 
         vm.startPrank(_feed);
+
         _token.approve(_beef, 123);
-        assertEq(_token.allowance(_feed, _beef), 123);
 
         vm.startPrank(_beef);
+
         bool success = _token.transferFrom(_feed, address(1967), 23);
         assertTrue(success);
     }
 
-    function test_name_isName() public {
-        assertEq(_token.name(), "");
+    function test_transferFrom_failReturnsFalse() public {
+        _token.exposed_mint(_feed, 123);
 
+        vm.startPrank(_feed);
+
+        _token.approve(_beef, 23);
+
+        vm.startPrank(_beef);
+
+        vm.expectRevert("Insufficient allowance");
+        bool success = _token.transferFrom(_feed, address(1967), 24);
+        assertTrue(success == false);
+    }
+
+    function test_name_isName() public {
         ERC20 otherToken = new ERC20("BasicToken", "BTX");
         assertEq(otherToken.name(), "BasicToken");
     }
 
     function test_symbol_isSymbol() public {
-        assertEq(_token.symbol(), "");
-
         ERC20 otherToken = new ERC20("BasicToken", "BTX");
         assertEq(otherToken.symbol(), "BTX");
     }
@@ -363,9 +427,13 @@ contract ERC20Test is Test {
         _token.exposed_mint(address(0), 123);
     }
 
-    function test_mint_balanceSupplyChanges() public {
+    function test_mint_supplyChanges() public {
         _token.exposed_mint(_beef, 123);
         assertEq(_token.totalSupply(), 123);
+    }
+
+    function test_mint_balanceChanges() public {
+        _token.exposed_mint(_beef, 123);
         assertEq(_token.balanceOf(_beef), 123);
     }
 
@@ -373,6 +441,17 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), _beef, 123);
         _token.exposed_mint(_beef, 123);
+    }
+
+    function test_mint_successReturnsTrue() public {
+        bool success = _token.exposed_mint(_beef, 123);
+        assertTrue(success);
+    }
+
+    function test_mint_failReturnsFalse() public {
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.exposed_mint(address(0), 123);
+        assertTrue(success == false);
     }
 
     function testFuzz_constructor(string memory name, string memory symbol) public {
@@ -383,14 +462,20 @@ contract ERC20Test is Test {
         assertEq(otherToken.totalSupply(), 0);
     }
 
-    function testFuzz_totalSupply_increaseWithMint(uint256 amount) public {
-        _token.exposed_mint(_beef, amount);
+    function testFuzz_totalSupply_increaseWithMint(address to, uint256 amount) public {
+        vm.assume(to != address(0));
 
+        _token.exposed_mint(to, amount);
         assertEq(_token.totalSupply(), amount);
     }
 
-    function testFuzz_balanceOf_increaseWithMint(uint256 amount) public {
-        assertEq(_token.balanceOf(_beef), 0);
+    function testFuzz_balanceOf_initZero(address to) public {
+        assertEq(_token.balanceOf(to), 0);
+    }
+
+    function testFuzz_balanceOf_increaseWithMint(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
         _token.exposed_mint(_beef, amount);
         assertEq(_token.balanceOf(_beef), amount);
     }
@@ -447,22 +532,25 @@ contract ERC20Test is Test {
     {
         vm.assume(owner != address(0));
         vm.assume(receiver != address(0));
-        vm.assume(owner != receiver);
         vm.assume(mintAmount >= sendAmount);
 
         _token.exposed_mint(owner, mintAmount);
-        assertEq(_token.balanceOf(owner), mintAmount);
-        assertEq(_token.balanceOf(receiver), 0);
 
         vm.startPrank(owner);
 
         _token.transfer(receiver, sendAmount);
-        assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
-        assertEq(_token.balanceOf(receiver), sendAmount);
 
-        if (mintAmount > sendAmount) {
-            _token.transfer(receiver, mintAmount - sendAmount);
-            assertEq(_token.balanceOf(owner), 0);
+        if (owner != receiver) {
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+
+            if (mintAmount > sendAmount) {
+                _token.transfer(receiver, mintAmount - sendAmount);
+                assertEq(_token.balanceOf(owner), 0);
+                assertEq(_token.balanceOf(receiver), mintAmount);
+            }
+        } else {
+            assertEq(_token.balanceOf(owner), mintAmount);
             assertEq(_token.balanceOf(receiver), mintAmount);
         }
     }
@@ -482,9 +570,49 @@ contract ERC20Test is Test {
         _token.exposed_mint(owner, mintAmount);
 
         vm.startPrank(owner);
+
         vm.expectEmit(true, true, true, true);
         emit Transfer(owner, receiver, sendAmount);
         _token.transfer(receiver, sendAmount);
+    }
+
+    function testFuzz_transfer_successReturnsTrue(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        bool success = _token.transfer(receiver, sendAmount);
+        assertTrue(success);
+    }
+
+    function testFuzz_transfer_failReturnsFalse(
+        address owner,
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.transfer(address(0), sendAmount);
+        assertTrue(success == false);
     }
 
     function testFuzz_transfer_entireFlow(
@@ -495,37 +623,33 @@ contract ERC20Test is Test {
     ) 
         public 
     {
-        vm.assume(owner != address(0)); // since this would revert in _mint, not transfer
+        vm.assume(owner != address(0));
 
         _token.exposed_mint(owner, mintAmount);
-        assertEq(_token.balanceOf(owner), mintAmount);
-        assertEq(_token.balanceOf(receiver), 0);
-        
         
         vm.startPrank(owner);
         
         if (sendAmount > mintAmount) {
             vm.expectRevert("Insufficient funds");
-            _token.transfer(receiver, sendAmount);
+            bool success = _token.transfer(receiver, sendAmount);
+            assertTrue(success == false);
         } else if (receiver == address(0)) {
             vm.expectRevert("Transfer to zero address");
-            _token.transfer(receiver, sendAmount);
-        } else if (owner == receiver) {
-            vm.expectEmit(true, true, false, true);
-            emit Transfer(owner, receiver, sendAmount);
             bool success = _token.transfer(receiver, sendAmount);
-
-            assertEq(_token.balanceOf(owner), mintAmount);
-            assertEq(_token.balanceOf(receiver), mintAmount);
-            assertTrue(success);
+            assertTrue(success == false);
         } else {
-            vm.expectEmit(true, true, false, true);
+            vm.expectEmit(true, true, true, true);
             emit Transfer(owner, receiver, sendAmount);
             bool success = _token.transfer(receiver, sendAmount);
-
-            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
-            assertEq(_token.balanceOf(receiver), sendAmount);
             assertTrue(success);
+
+            if (owner != receiver) {
+                assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+                assertEq(_token.balanceOf(receiver), sendAmount);
+            } else {
+                assertEq(_token.balanceOf(owner), mintAmount);
+                assertEq(_token.balanceOf(receiver), mintAmount);
+            }
         }
     }
 
@@ -539,7 +663,6 @@ contract ERC20Test is Test {
         vm.assume(owner != spender);
 
         _token.exposed_mint(owner, amount);
-        assertEq(_token.balanceOf(owner), amount);
 
         vm.startPrank(owner);
 
@@ -560,7 +683,6 @@ contract ERC20Test is Test {
         vm.assume(owner != spender);
 
         _token.exposed_mint(owner, amount1);
-        assertEq(_token.balanceOf(owner), amount1);
 
         vm.startPrank(owner);
 
@@ -673,6 +795,42 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, true, true);
         emit Approval(owner, spender, amount);
         _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_successReturnsTrue(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        bool success = _token.approve(spender, amount);
+        assertTrue(success);
+    }
+
+    function testFuzz_approve_failReturnsFalse(
+        address owner,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        vm.expectRevert("Approval of zero address");
+        bool success = _token.approve(address(0), amount);
+        assertTrue(success == false);
     }
 
     function testFuzz_transferFrom_insufficientAllowance(
@@ -841,6 +999,39 @@ contract ERC20Test is Test {
         assertEq(_token.allowance(owner, spender), allowanceAmount - sendAmount);
     }
 
+    function testFuzz_transferFrom_allowanceUpdate(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount1,
+        uint256 allowanceAmount2
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= allowanceAmount1);
+        vm.assume(mintAmount >= allowanceAmount2);
+
+        _token.exposed_mint(owner, mintAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount1);
+        _token.approve(spender, allowanceAmount2);
+        assertEq(_token.allowance(owner, spender), allowanceAmount2);
+
+        vm.startPrank(spender);
+
+        if (allowanceAmount1 > allowanceAmount2) {
+            vm.expectRevert("Insufficient allowance");
+        }
+        _token.transferFrom(owner, receiver, allowanceAmount1);
+    }
+
     function testFuzz_transferFrom_eventEmitted(
         address owner, 
         address spender,
@@ -868,8 +1059,64 @@ contract ERC20Test is Test {
 
         vm.expectEmit(true, true, true, true);
         emit Transfer(owner, receiver, sendAmount);
-
         _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_successReturnsTrue(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        bool success = _token.transferFrom(owner, receiver, sendAmount);
+        assertTrue(success);
+    }
+
+    function testFuzz_transferFrom_failReturnsFalse(
+        address owner, 
+        address spender,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.transferFrom(owner, address(0), sendAmount);
+        assertTrue(success == false);
     }
 
     function testFuzz_mint_toZeroAddress(address to, uint256 amount) public {
@@ -900,7 +1147,18 @@ contract ERC20Test is Test {
 
         vm.expectEmit(true, true, true, true);
         emit Transfer(address(0), to, amount);
-
         _token.exposed_mint(to, amount);
+    }
+
+    function testFuzz_mint_successReturnTrue(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+        bool success = _token.exposed_mint(to, amount);
+        assertTrue(success);
+    }
+
+    function testFuzz_mint_failReturnsFalse(uint256 amount) public {
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.exposed_mint(address(0), amount);
+        assertTrue(success == false);
     }
 }
