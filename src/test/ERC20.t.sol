@@ -673,4 +673,94 @@ contract ERC20Test is Test {
         emit Approval(owner, spender, amount);
         _token.approve(spender, amount);
     }
+
+    function testFuzz_transferFrom_insufficientAllowance(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (sendAmount > allowanceAmount) {
+            vm.expectRevert("Insufficient allowance");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_insufficientFunds(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (sendAmount > mintAmount) {
+            vm.expectRevert("Insufficient funds");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_toZeroAddress(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        if (receiver == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+        }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
 }
