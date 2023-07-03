@@ -384,8 +384,8 @@ contract ERC20Test is Test {
     }
 
     function testFuzz_totalSupply_increaseWithMint(uint256 amount) public {
-        assertEq(_token.totalSupply(), 0);
         _token.exposed_mint(_beef, amount);
+
         assertEq(_token.totalSupply(), amount);
     }
 
@@ -870,5 +870,37 @@ contract ERC20Test is Test {
         emit Transfer(owner, receiver, sendAmount);
 
         _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_mint_toZeroAddress(address to, uint256 amount) public {
+        if (to == address(0)) {
+            vm.expectRevert("Transfer to zero address");
+        }
+        _token.exposed_mint(to, amount);
+    }
+
+    function testFuzz_mint_totalSupplyIncreases(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        _token.exposed_mint(to, amount);
+
+        assertEq(_token.totalSupply(), amount);
+    }
+
+    function testFuzz_mint_balanceIncreases(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        _token.exposed_mint(to, amount);
+
+        assertEq(_token.balanceOf(to), amount);
+    }
+
+    function testFuzz_mint_eventEmitted(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), to, amount);
+
+        _token.exposed_mint(to, amount);
     }
 }
