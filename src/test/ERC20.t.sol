@@ -9,8 +9,8 @@ import "../ERC20.sol";
 
 contract ERC20Harness is ERC20("", "") {
 
-    function exposed_mint(address to, uint256 amount) public {
-        _mint(to, amount);
+    function exposed_mint(address to, uint256 amount) public returns (bool) {
+        return _mint(to, amount);
     }
 }
 
@@ -443,6 +443,17 @@ contract ERC20Test is Test {
         _token.exposed_mint(_beef, 123);
     }
 
+    function test_mint_successReturnsTrue() public {
+        bool success = _token.exposed_mint(_beef, 123);
+        assertTrue(success);
+    }
+
+    function test_mint_failReturnsFalse() public {
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.exposed_mint(address(0), 123);
+        assertTrue(success == false);
+    }
+
     function testFuzz_constructor(string memory name, string memory symbol) public {
         ERC20 otherToken = new ERC20(name, symbol);
 
@@ -563,6 +574,45 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, true, true);
         emit Transfer(owner, receiver, sendAmount);
         _token.transfer(receiver, sendAmount);
+    }
+
+    function testFuzz_transfer_successReturnsTrue(
+        address owner, 
+        address receiver, 
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        bool success = _token.transfer(receiver, sendAmount);
+        assertTrue(success);
+    }
+
+    function testFuzz_transfer_failReturnsFalse(
+        address owner,
+        uint256 mintAmount, 
+        uint256 sendAmount
+    ) 
+        public 
+    {
+        vm.assume(owner != address(0));
+        vm.assume(mintAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.transfer(address(0), sendAmount);
+        assertTrue(success == false);
     }
 
     function testFuzz_transfer_entireFlow(
@@ -745,6 +795,42 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, true, true);
         emit Approval(owner, spender, amount);
         _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_successReturnsTrue(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        bool success = _token.approve(spender, amount);
+        assertTrue(success);
+    }
+
+    function testFuzz_approve_failReturnsFalse(
+        address owner,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        vm.expectRevert("Approval of zero address");
+        bool success = _token.approve(address(0), amount);
+        assertTrue(success == false);
     }
 
     function testFuzz_transferFrom_insufficientAllowance(
@@ -976,6 +1062,63 @@ contract ERC20Test is Test {
         _token.transferFrom(owner, receiver, sendAmount);
     }
 
+    function testFuzz_transferFrom_successReturnsTrue(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        bool success = _token.transferFrom(owner, receiver, sendAmount);
+        assertTrue(success);
+    }
+
+    function testFuzz_transferFrom_failReturnsFalse(
+        address owner, 
+        address spender,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.transferFrom(owner, address(0), sendAmount);
+        assertTrue(success == false);
+    }
+
     function testFuzz_mint_toZeroAddress(address to, uint256 amount) public {
         if (to == address(0)) {
             vm.expectRevert("Transfer to zero address");
@@ -1005,5 +1148,17 @@ contract ERC20Test is Test {
         vm.expectEmit(true, true, true, true);
         emit Transfer(address(0), to, amount);
         _token.exposed_mint(to, amount);
+    }
+
+    function testFuzz_mint_successReturnTrue(address to, uint256 amount) public {
+        vm.assume(to != address(0));
+        bool success = _token.exposed_mint(to, amount);
+        assertTrue(success);
+    }
+
+    function testFuzz_mint_failReturnsFalse(uint256 amount) public {
+        vm.expectRevert("Transfer to zero address");
+        bool success = _token.exposed_mint(address(0), amount);
+        assertTrue(success == false);
     }
 }
