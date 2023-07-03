@@ -594,4 +594,83 @@ contract ERC20Test is Test {
         assertEq(_token.balanceOf(receiver), amount);
         assertEq(_token.allowance(owner, spender), 0);
     }
+
+    function testFuzz_approve_toZeroAddress(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        if (spender == address(0)) {
+            vm.expectRevert("Approval of zero address");
+        }
+        _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_ownerNotSpender(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        if (owner == spender) {
+            vm.expectRevert("Approval of owner as spender");
+        }
+        _token.approve(spender, amount);
+    }
+
+    function testFuzz_approve_allowanceIncreases(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, amount);
+        assertEq(_token.allowance(owner, spender), amount);
+    }
+
+    function testFuzz_approve_eventEmitted(
+        address owner, 
+        address spender,
+        uint256 amount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(owner != spender);
+
+        _token.exposed_mint(owner, amount);
+
+        vm.startPrank(owner);
+
+        vm.expectEmit(true, true, true, true);
+        emit Approval(owner, spender, amount);
+        _token.approve(spender, amount);
+    }
 }
