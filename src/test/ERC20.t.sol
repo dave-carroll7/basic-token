@@ -407,8 +407,6 @@ contract ERC20Test is Test {
         vm.assume(receiver != address(0));
 
         _token.exposed_mint(owner, mintAmount);
-        assertEq(_token.balanceOf(owner), mintAmount);
-        assertEq(_token.balanceOf(receiver), 0);
 
         vm.startPrank(owner);
 
@@ -430,8 +428,6 @@ contract ERC20Test is Test {
         vm.assume(mintAmount >= sendAmount);
 
         _token.exposed_mint(owner, mintAmount);
-        assertEq(_token.balanceOf(owner), mintAmount);
-        assertEq(_token.balanceOf(receiver), 0);
 
         vm.startPrank(owner);
 
@@ -451,6 +447,7 @@ contract ERC20Test is Test {
     {
         vm.assume(owner != address(0));
         vm.assume(receiver != address(0));
+        vm.assume(owner != receiver);
         vm.assume(mintAmount >= sendAmount);
 
         _token.exposed_mint(owner, mintAmount);
@@ -483,8 +480,6 @@ contract ERC20Test is Test {
         vm.assume(mintAmount >= sendAmount);
 
         _token.exposed_mint(owner, mintAmount);
-        assertEq(_token.balanceOf(owner), mintAmount);
-        assertEq(_token.balanceOf(receiver), 0);
 
         vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
@@ -501,7 +496,7 @@ contract ERC20Test is Test {
         public 
     {
         vm.assume(owner != address(0)); // since this would revert in _mint, not transfer
-        
+
         _token.exposed_mint(owner, mintAmount);
         assertEq(_token.balanceOf(owner), mintAmount);
         assertEq(_token.balanceOf(receiver), 0);
@@ -515,6 +510,14 @@ contract ERC20Test is Test {
         } else if (receiver == address(0)) {
             vm.expectRevert("Transfer to zero address");
             _token.transfer(receiver, sendAmount);
+        } else if (owner == receiver) {
+            vm.expectEmit(true, true, false, true);
+            emit Transfer(owner, receiver, sendAmount);
+            bool success = _token.transfer(receiver, sendAmount);
+
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+            assertTrue(success);
         } else {
             vm.expectEmit(true, true, false, true);
             emit Transfer(owner, receiver, sendAmount);
@@ -580,18 +583,16 @@ contract ERC20Test is Test {
         vm.assume(spender != address(0));
         vm.assume(receiver != address(0));
         vm.assume(owner != spender);
-        
+
         _token.exposed_mint(owner, amount);
-        assertEq(_token.balanceOf(owner), amount);
 
         vm.startPrank(owner);
 
         _token.approve(spender, amount);
-        assertEq(_token.allowance(owner, spender), amount);
 
         vm.startPrank(spender);
+
         _token.transferFrom(owner, receiver, amount);
-        assertEq(_token.balanceOf(receiver), amount);
         assertEq(_token.allowance(owner, spender), 0);
     }
 
@@ -761,6 +762,113 @@ contract ERC20Test is Test {
         if (receiver == address(0)) {
             vm.expectRevert("Transfer to zero address");
         }
+        _token.transferFrom(owner, receiver, sendAmount);
+    }
+
+    function testFuzz_transferFrom_balanceAllowanceChanges(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        vm.startPrank(spender);
+
+        _token.transferFrom(owner, receiver, sendAmount);
+
+        if (owner != receiver) {
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+        } else {
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+        }
+
+        assertEq(_token.allowance(owner, spender), allowanceAmount - sendAmount);
+    }
+
+    function testFuzz_transferFrom_approveBeforeMint(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        _token.transferFrom(owner, receiver, sendAmount);
+
+        if (owner != receiver) {
+            assertEq(_token.balanceOf(owner), mintAmount - sendAmount);
+            assertEq(_token.balanceOf(receiver), sendAmount);
+        } else {
+            assertEq(_token.balanceOf(owner), mintAmount);
+            assertEq(_token.balanceOf(receiver), mintAmount);
+        }
+
+        assertEq(_token.allowance(owner, spender), allowanceAmount - sendAmount);
+    }
+
+    function testFuzz_transferFrom_eventEmitted(
+        address owner, 
+        address spender,
+        address receiver,
+        uint256 mintAmount,
+        uint256 allowanceAmount,
+        uint256 sendAmount
+    )
+        public
+    {
+        vm.assume(owner != address(0));
+        vm.assume(spender != address(0));
+        vm.assume(receiver != address(0));
+        vm.assume(owner != spender);
+        vm.assume(mintAmount >= sendAmount);
+        vm.assume(allowanceAmount >= sendAmount);
+        
+        vm.startPrank(owner);
+
+        _token.approve(spender, allowanceAmount);
+
+        _token.exposed_mint(owner, mintAmount);
+
+        vm.startPrank(spender);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(owner, receiver, sendAmount);
+
         _token.transferFrom(owner, receiver, sendAmount);
     }
 }
