@@ -356,6 +356,21 @@ contract ERC20Test is Test {
         assertEq(_token.balanceOf(address(1967)), 100);
     }
 
+    function test_transferFrom_allowanceUpdate() public {
+        _token.exposed_mint(_feed, 123);
+        
+        vm.startPrank(_feed);
+
+        _token.approve(_beef, 123);
+        _token.approve(_beef, 100);
+        assertEq(_token.allowance(_feed, _beef), 100);
+
+        vm.startPrank(_beef);
+
+        vm.expectRevert("Insufficient allowance");
+        _token.transferFrom(_feed, address(1967), 123);
+    }
+
     function test_transferFrom_eventEmitted() public {
         _token.exposed_mint(_feed, 123);
 
